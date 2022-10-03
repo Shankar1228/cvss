@@ -1,0 +1,238 @@
+<?php
+
+class Cvss_model extends CI_Model
+{
+	public function attack_vector_metrics($attack_vec, $base_attack_vector = 0)
+	{
+		switch ($attack_vec) {
+			case "not_defined":
+				$attack_vec = $base_attack_vector;
+				break;
+			case "network":
+				$attack_vec = 0.85;
+				break;
+			case "adjacent":
+				$attack_vec = 0.62;
+				break;
+			case "local":
+				$attack_vec = 0.55;
+				break;
+			case "physical":
+				$attack_vec = 0.2;
+				break;	
+			default:
+				$attack_vec = ($base_attack_vector == 0) ? "Attack Vector" : 0;
+		}
+		return $attack_vec;
+	}
+	
+	public function attack_complexity_metrics($attack_comp, $base_attack_complexity = 0)
+	{
+		switch ($attack_comp) {
+			case "not_defined":
+				$attack_comp = $base_attack_complexity;
+				break;
+			case "low":
+				$attack_comp = 0.77;
+				break;
+			case "high":
+				$attack_comp = 0.44;	
+				break;	
+			default:
+				$attack_comp = ($base_attack_complexity == 0) ? "Attack Complexity" : 0;
+		}
+		return $attack_comp;
+	}
+
+	public function privileges_required_metrics($privileges_req, $modScope, $base_privileges_required = 0)
+	{
+		switch ($privileges_req) {
+			case "not_defined":
+				$privileges_req = $base_privileges_required;
+				break;
+			case "none":
+				$privileges_req = 0.85;
+				break;
+			case "low":
+				if ( $modScope == "changed" ) 
+				{
+					$privileges_req = 0.68;
+				} elseif ( $modScope == "unchanged" ) { 
+					$privileges_req = 0.62;
+				} else {
+					$privileges_req = 0;
+				}
+				break;
+			case "high":
+				if ( $modScope == "changed" ) 
+				{
+					$privileges_req = 0.5;
+				} elseif ( $modScope == "unchanged" ) { 
+					$privileges_req = 0.27;
+				} else {
+					$privileges_req = 0;
+				}	
+				break;	
+			default:
+				$privileges_req = ($base_privileges_required == 0) ? "Priviliges Required" : 0;
+		}
+		return $privileges_req;
+	}
+
+	public function user_interaction_metrics($user_interact, $base_user_interaction = 0)
+	{
+		switch ($user_interact) {
+			case "not_defined":
+				$user_interact = $base_user_interaction;
+				break;
+			case "none":
+				$user_interact = 0.85;
+				break;
+			case "required":
+				$user_interact = 0.62;
+				break;	
+			default:
+				$user_interact = ($base_user_interaction == 0) ? "User Interaction" : 0;
+		}
+		return $user_interact;
+	}
+
+	public function impact_metrics($value)
+	{
+		switch ($value) {
+			case "none":
+				$value = 0;
+				break;
+			case "low":
+				$value = 0.22;
+				break;
+			case "high":
+				$value = 0.56;
+				break;
+			default:
+				$value = "Invalid_entry";
+		}
+		return $value;	
+	}
+	
+	public function exploit_code_maturity_metrics($exploit_code)
+	{
+		switch ($exploit_code) {
+			case "not_defined":
+				$exploit_code = 1;
+				break;
+			case "high":
+				$exploit_code = 1;
+				break;
+			case "functional":
+				$exploit_code = 0.97;
+				break;
+			case "proof_of_concept":
+				$exploit_code = 0.94;
+				break;
+			case "unproven":
+				$exploit_code = 0.91;
+				break;
+			default:
+				$exploit_code = 0;
+		}
+		return $exploit_code;	
+	}
+	
+	public function remediation_level_metrics($remed_level)
+	{
+		switch ($remed_level) {
+			case "not_defined":
+				$remed_level = 1;
+				break;
+			case "unavailable":
+				$remed_level = 1;
+				break;
+			case "workaround":
+				$remed_level = 0.97;
+				break;
+			case "temporary_fix":
+				$remed_level = 0.96;
+				break;
+			case "official_fix":
+				$remed_level = 0.95;
+				break;
+			default:
+				$remed_level = 0;
+		}
+		return $remed_level;	
+	}
+	
+	public function report_confidence_metrics($report_conf)
+	{
+		switch ($report_conf) {
+			case "not_defined":
+				$report_conf = 1;
+				break;
+			case "confirmed":
+				$report_conf = 1;
+				break;
+			case "reasonable":
+				$report_conf = 0.96;
+				break;
+			case "unknown":
+				$report_conf = 0.92;
+				break;
+			default:
+				$report_conf = 0;
+		}
+		return $report_conf;	
+	}
+	
+	public function modified_impact_metrics($value, $base_value=0)
+	{
+		switch ($value) {
+			case "not_defined":
+				$value = $base_value;
+				break;
+			case "none":
+				$value = 0;
+				break;
+			case "low":
+				$value = 0.22;
+				break;
+			case "high":
+				$value = 0.56;
+				break;
+			default:
+				$value = 0;
+		}
+		return $value;	
+	}
+
+	public function requirement_metrics($value)
+	{
+		switch ($value) {
+			case "not_defined":
+				$value = 1;
+				break;
+			case "low":
+				$value = 0.5;
+				break;
+			case "medium":
+				$value = 1;
+				break;
+			case "high":
+				$value = 1.5;
+				break;
+			default:
+				$value = 0;
+		}
+		return $value;	
+	}
+	
+	public function roundup($input)
+	{
+		$int_input = round($input * 100000);
+		if ($int_input % 10000 == 0) {
+			return $int_input / 100000.0;
+		} else {
+			return (floor($int_input / 10000) + 1) / 10.0;
+		}
+	}	
+}

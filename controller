@@ -1,0 +1,362 @@
+<?php
+
+class Cvss extends CI_Controller
+{
+    public function __construct()
+    {
+	    parent::__construct();
+		$this->load->model("Cvss_model");
+	}
+
+//Common Vulnerability Scoring System Calculator Version 3.0
+
+	public function score_version_three() 
+	{
+		// Getting the Input values to calculate the base score
+
+		$attack_vector = $this->input->get('attack_vector');
+		$attack_complexity = $this->input->get('attack_complexity');
+		$privileges_required = $this->input->get('privileges_required');
+		$user_interaction = $this->input->get('user_interaction');
+		$scope = $this->input->get('scope');
+		$confidentiality = $this->input->get('confidentiality');
+		$integrity = $this->input->get('integrity');
+		$availability = $this->input->get('availability');
+
+		//Obtaining the metric values from the input values provided for the base score
+
+		$attack_vector = $this->Cvss_model->attack_vector_metrics($attack_vector);
+		$attack_complexity = $this->Cvss_model->attack_complexity_metrics($attack_complexity);
+		$privileges_required = $this->Cvss_model->privileges_required_metrics($privileges_required, $scope);
+		$user_interaction = $this->Cvss_model->user_interaction_metrics($user_interaction);
+		$confidentiality = $this->Cvss_model->impact_metrics($confidentiality);
+		$integrity = $this->Cvss_model->impact_metrics($integrity);
+		$availability = $this->Cvss_model->impact_metrics($availability);
+
+		//Checking the valid data is entered into the input since all the parameters required to calculate the base score are mandatory
+
+		$mandatory_list = array();
+		if (
+			$scope != "changed"
+			AND $scope != "unchanged"
+		) {
+			array_push($mandatory_list, 'Scope');
+		}
+
+		foreach ( array ($attack_vector, $attack_complexity, $privileges_required, $user_interaction, $confidentiality, $integrity, $availability) as 
+			$value)
+		{
+			if (is_string($value))
+			{
+				array_push($mandatory_list, $value);
+			}
+		}
+
+		if (!empty($mandatory_list))
+		{
+			echo "Please enter the valid data for the following fields : ";
+			foreach ($mandatory_list as $value) {
+				echo $value, "<br>";
+			}	
+			exit();	
+		}
+
+		//Getting input parameters required to calculate the temporal and environmental scores
+
+		$exploit_code_maturity = $this->input->get('exploit_code_maturity') == NULL ? "NotDefined" : $this->input->get('exploit_code_maturity');
+		$remediation_level = $this->input->get('remediation_level') == NULL ? "NotDefined" : $this->input->get('remediation_level');
+		$report_confidence = $this->input->get('report_confidence') == NULL ? "NotDefined" : $this->input->get('report_confidence');
+		$modified_attack_vector = $this->input->get('modified_attack_vector') == NULL ? "NotDefined" : $this->input->get('modified_attack_vector');
+		$modified_attack_complexity = $this->input->get('modified_attack_complexity') == NULL ? "NotDefined" : 
+			$this->input->get('modified_attack_complexity');
+		$modified_privileges_required = $this->input->get('modified_privileges_required') == NULL ? "NotDefined" : 
+			$this->input->get('modified_privileges_required');
+		$modified_user_interaction = $this->input->get('modified_user_interaction') == NULL ? "NotDefined" : 
+			$this->input->get('modified_user_interaction');
+		$modified_scope = $this->input->get('modified_scope') == NULL ? "NotDefined" : $this->input->get('modified_scope');
+		$modified_confidentiality = $this->input->get('modified_confidentiality') == NULL ? "NotDefined" : 
+			$this->input->get('modified_confidentiality');
+		$modified_integrity = $this->input->get('modified_integrity') == NULL ? "NotDefined" : $this->input->get('modified_integrity');
+		$modified_availability = $this->input->get('modified_availability') == NULL ? "NotDefined" : $this->input->get('modified_availability');
+		$confidentiality_requirement = $this->input->get('confidentiality_requirement') == NULL ? "NotDefined" : 
+			$this->input->get('confidentiality_requirement');
+		$integrity_requirement = $this->input->get('integrity_requirement') == NULL ? "NotDefined" : $this->input->get('integrity_requirement');
+		$availability_requirement = $this->input->get('availability_requirement') == NULL ? "NotDefined" : 
+			$this->input->get('availability_requirement');
+		
+		//Base Score calculation logic
+
+		$impact_sub_score = 1 - ((1 - $confidentiality) * (1 - $integrity) * (1 - $availability));
+
+		if ($scope == "changed") {
+		    $impact = 7.52 * ($impact_sub_score - 0.029) - 3.25 * pow(($impact_sub_score - 0.02), 15);
+		} else {
+			$impact = 6.42 * $impact_sub_score;
+		}
+			
+		$exploitability = 8.22 * $attack_vector * $attack_complexity * $privileges_required * $user_interaction;
+		
+		if ($impact <= 0) {
+			$base_score = 0;
+		} else {
+			if ($scope == "changed") {
+				$base_score = min(1.08 * ($impact + $exploitability), 10);
+			} else {
+				$base_score = min(($impact + $exploitability), 10);
+			}
+		}
+
+		$base_score = $this->Cvss_model->roundup($base_score);
+		
+		//Temporal Score calculation logic
+		if (
+			$exploit_code_maturity == 'not_defined' 
+			AND $remediation_level == 'not_defined' 
+			AND $report_confidence == 'not_defined'
+		) {
+			$temporal_score = 0;
+			$exploit_code_maturity = $remediation_level = $report_confidence = 1;
+		} elseif (
+			$exploit_code_maturity != '0' 
+			AND $remediation_level != '0' 
+			AND $report_confidence != '0'
+		) {
+			$exploit_code_maturity = $this->Cvss_model->exploit_code_maturity_metrics($exploit_code_maturity);	
+			$remediation_level = $this->Cvss_model->remediation_level_metrics($remediation_level);	
+			$report_confidence = $this->Cvss_model->report_confidence_metrics($report_confidence);
+			$temporal_score = $this->Cvss_model->roundup($base_score * $exploit_code_maturity * $remediation_level * 						$report_confidence);		
+		} else {
+			$temporal_score = 0;
+			$exploit_code_maturity = $remediation_level = $report_confidence = 0;
+		}
+		
+		//Obtaining metric values for the input parameters related to environmental score
+
+		$modified_attack_vector = $this->Cvss_model->attack_vector_metrics($modified_attack_vector, $attack_vector);
+		$modified_attack_complexity = $this->Cvss_model->attack_complexity_metrics($modified_attack_complexity, 
+			$attack_complexity);
+		$modified_scope = ($modified_scope == "not_defined") ? $scope : $modified_scope;
+		$modified_privileges_required = $this->Cvss_model->privileges_required_metrics($modified_privileges_required, 
+			$modified_scope, $privileges_required);
+		$modified_user_interaction = $this->Cvss_model->user_interaction_metrics($modified_user_interaction, 
+			$user_interaction);
+		$modified_confidentiality = $this->Cvss_model->modified_impact_metrics($modified_confidentiality, $confidentiality);
+		$modified_integrity = $this->Cvss_model->modified_impact_metrics($modified_integrity, $integrity);
+		$modified_availability = $this->Cvss_model->modified_impact_metrics($modified_availability, $availability);
+		$confidentiality_requirement = $this->Cvss_model->requirement_metrics($confidentiality_requirement);
+		$integrity_requirement = $this->Cvss_model->requirement_metrics($integrity_requirement);
+		$availability_requirement = $this->Cvss_model->requirement_metrics($availability_requirement);
+		
+		//Environmental Score calculation logic
+
+		$modified_impact_sub_score = min(1 - ((1 - $confidentiality_requirement * $modified_confidentiality) * (1 - $integrity_requirement * $modified_integrity) * (1 - $availability_requirement * $modified_availability)), 0.915);
+
+		if ($modified_scope == "changed") {
+			$modified_impact = 7.52 * ($modified_impact_sub_score - 0.029) - 3.25 * pow(($modified_impact_sub_score - 0.02), 15);
+		} else {
+			$modified_impact = 6.42 * $modified_impact_sub_score;
+		}
+
+		$modifiedExploitability = 8.22 * $modified_attack_vector * $modified_attack_complexity * $modified_privileges_required * 
+			$modified_user_interaction;
+
+		if ($modified_impact <= 0) {
+			$env_score = 0;
+		} else {
+			if ($modified_scope == "changed") {
+				$env_score = $this->Cvss_model->roundup($this->Cvss_model->roundup(min(1.08 * ($modified_impact + $modifiedExploitability), 10)) * $exploit_code_maturity * $remediation_level * $report_confidence);
+			} else { 
+				$env_score = $this->Cvss_model->roundup($this->Cvss_model->roundup(min(($modified_impact + $modifiedExploitability), 10)) * $exploit_code_maturity * $remediation_level * $report_confidence);
+			}
+		}
+
+//Overall Score
+
+		if ($env_score > 0) {
+			$overall_score = $env_score;
+		} elseif ($temporal_score > 0) {
+			$overall_score = $temporal_score;
+		} else {
+			$overall_score = $base_score;
+		}
+		
+		echo "Base Score is : ", $base_score, " Temporal Score is : ", $temporal_score, ", Environmental Score is : ", $env_score, ", Overall Score is : ", $overall_score;		
+	}
+
+//Common Vulnerability Scoring System Calculator Version 3.1
+
+	public function score_version_three_point_one() 
+	{
+		// Getting the Input values to calculate the base score
+
+		$attack_vector = $this->input->get('attack_vector');
+		$attack_complexity = $this->input->get('attack_complexity');
+		$privileges_required = $this->input->get('privileges_required');
+		$user_interaction = $this->input->get('user_interaction');
+		$scope = $this->input->get('scope');
+		$confidentiality = $this->input->get('confidentiality');
+		$integrity = $this->input->get('integrity');
+		$availability = $this->input->get('availability');
+
+		//Obtaining the metric values from the input values provided for the base score
+
+		$attack_vector = $this->Cvss_model->attack_vector_metrics($attack_vector);
+		$attack_complexity = $this->Cvss_model->attack_complexity_metrics($attack_complexity);
+		$privileges_required = $this->Cvss_model->privileges_required_metrics($privileges_required, $scope);
+		$user_interaction = $this->Cvss_model->user_interaction_metrics($user_interaction);
+		$confidentiality = $this->Cvss_model->impact_metrics($confidentiality);
+		$integrity = $this->Cvss_model->impact_metrics($integrity);
+		$availability = $this->Cvss_model->impact_metrics($availability);
+
+		//Checking the valid data is entered into the input since all the parameters required to calculate the base score are mandatory
+
+		$mandatory_list = array();
+		if (
+			$scope != "changed"
+			AND $scope != "unchanged"
+		) {
+			array_push($mandatory_list, 'Scope');
+		}
+
+		foreach ( array ($attack_vector, $attack_complexity, $privileges_required, $user_interaction, $confidentiality, $integrity, $availability) as 
+			$value)
+		{
+			if (is_string($value))
+			{
+				array_push($mandatory_list, $value);
+			}
+		}
+
+		if (!empty($mandatory_list))
+		{
+			echo "Please enter the valid data for the following fields : ";
+			foreach ($mandatory_list as $value) {
+				echo $value, "<br>";
+			}	
+			exit();	
+		}
+
+		//Getting input parameters required to calculate the temporal and environmental scores
+
+		$exploit_code_maturity = $this->input->get('exploit_code_maturity') == NULL ? "NotDefined" : $this->input->get('exploit_code_maturity');
+		$remediation_level = $this->input->get('remediation_level') == NULL ? "NotDefined" : $this->input->get('remediation_level');
+		$report_confidence = $this->input->get('report_confidence') == NULL ? "NotDefined" : $this->input->get('report_confidence');
+		$modified_attack_vector = $this->input->get('modified_attack_vector') == NULL ? "NotDefined" : $this->input->get('modified_attack_vector');
+		$modified_attack_complexity = $this->input->get('modified_attack_complexity') == NULL ? "NotDefined" : 
+			$this->input->get('modified_attack_complexity');
+		$modified_privileges_required = $this->input->get('modified_privileges_required') == NULL ? "NotDefined" : 
+			$this->input->get('modified_privileges_required');
+		$modified_user_interaction = $this->input->get('modified_user_interaction') == NULL ? "NotDefined" : 
+			$this->input->get('modified_user_interaction');
+		$modified_scope = $this->input->get('modified_scope') == NULL ? "NotDefined" : $this->input->get('modified_scope');
+		$modified_confidentiality = $this->input->get('modified_confidentiality') == NULL ? "NotDefined" : 
+			$this->input->get('modified_confidentiality');
+		$modified_integrity = $this->input->get('modified_integrity') == NULL ? "NotDefined" : $this->input->get('modified_integrity');
+		$modified_availability = $this->input->get('modified_availability') == NULL ? "NotDefined" : $this->input->get('modified_availability');
+		$confidentiality_requirement = $this->input->get('confidentiality_requirement') == NULL ? "NotDefined" : 
+			$this->input->get('confidentiality_requirement');
+		$integrity_requirement = $this->input->get('integrity_requirement') == NULL ? "NotDefined" : $this->input->get('integrity_requirement');
+		$availability_requirement = $this->input->get('availability_requirement') == NULL ? "NotDefined" : 
+			$this->input->get('availability_requirement');
+		
+		//Base Score calculation logic
+
+		$impact_sub_score = 1 - ((1 - $confidentiality) * (1 - $integrity) * (1 - $availability));
+
+		if ($scope == "changed") {
+		    $impact = 7.52 * ($impact_sub_score - 0.029) - 3.25 * pow(($impact_sub_score - 0.02), 15);
+		} else {
+			$impact = 6.42 * $impact_sub_score;
+		}
+			
+		$exploitability = 8.22 * $attack_vector * $attack_complexity * $privileges_required * $user_interaction;
+		
+		if ($impact <= 0) {
+			$base_score = 0;
+		} else {
+			if ($scope == "changed") {
+				$base_score = min(1.08 * ($impact + $exploitability), 10);
+			} else {
+				$base_score = min(($impact + $exploitability), 10);
+			}
+		}
+
+		$base_score = $this->Cvss_model->roundup($base_score);
+		
+		//Temporal Score calculation logic
+		if (
+			$exploit_code_maturity == 'not_defined' 
+			AND $remediation_level == 'not_defined' 
+			AND $report_confidence == 'not_defined'
+		) {
+			$temporal_score = 0;
+			$exploit_code_maturity = $remediation_level = $report_confidence = 1;
+		} elseif (
+			$exploit_code_maturity != '0' 
+			AND $remediation_level != '0' 
+			AND $report_confidence != '0'
+		) {
+			$exploit_code_maturity = $this->Cvss_model->exploit_code_maturity_metrics($exploit_code_maturity);	
+			$remediation_level = $this->Cvss_model->remediation_level_metrics($remediation_level);	
+			$report_confidence = $this->Cvss_model->report_confidence_metrics($report_confidence);
+			$temporal_score = $this->Cvss_model->roundup($base_score * $exploit_code_maturity * $remediation_level * 						$report_confidence);		
+		} else {
+			$temporal_score = 0;
+			$exploit_code_maturity = $remediation_level = $report_confidence = 0;
+		}
+		
+		//Obtaining metric values for the input parameters related to environmental score
+
+		$modified_attack_vector = $this->Cvss_model->attack_vector_metrics($modified_attack_vector, $attack_vector);
+		$modified_attack_complexity = $this->Cvss_model->attack_complexity_metrics($modified_attack_complexity, 
+			$attack_complexity);
+		$modified_scope = ($modified_scope == "not_defined") ? $scope : $modified_scope;
+		$modified_privileges_required = $this->Cvss_model->privileges_required_metrics($modified_privileges_required, 
+			$modified_scope, $privileges_required);
+		$modified_user_interaction = $this->Cvss_model->user_interaction_metrics($modified_user_interaction, 
+			$user_interaction);
+		$modified_confidentiality = $this->Cvss_model->modified_impact_metrics($modified_confidentiality, $confidentiality);
+		$modified_integrity = $this->Cvss_model->modified_impact_metrics($modified_integrity, $integrity);
+		$modified_availability = $this->Cvss_model->modified_impact_metrics($modified_availability, $availability);
+		$confidentiality_requirement = $this->Cvss_model->requirement_metrics($confidentiality_requirement);
+		$integrity_requirement = $this->Cvss_model->requirement_metrics($integrity_requirement);
+		$availability_requirement = $this->Cvss_model->requirement_metrics($availability_requirement);
+		
+		//Environmental Score calculation logic
+
+		$modified_impact_sub_score = min(1 - ((1 - $confidentiality_requirement * $modified_confidentiality) * (1 - $integrity_requirement * $modified_integrity) * (1 - $availability_requirement * $modified_availability)), 0.915);
+
+		if ($modified_scope == "changed") {
+			$modified_impact = 7.52 * ($modified_impact_sub_score - 0.029) - 3.25 * pow(($modified_impact_sub_score * 0.9731 - 0.02), 
+				13);
+		} else {
+			$modified_impact = 6.42 * $modified_impact_sub_score;
+		}
+
+		$modifiedExploitability = 8.22 * $modified_attack_vector * $modified_attack_complexity * $modified_privileges_required * 
+			$modified_user_interaction;
+
+		if ($modified_impact <= 0) {
+			$env_score = 0;
+		} else {
+			if ($modified_scope == "changed") {
+				$env_score = $this->Cvss_model->roundup($this->Cvss_model->roundup(min(1.08 * ($modified_impact + $modifiedExploitability), 10)) * $exploit_code_maturity * $remediation_level * $report_confidence);
+			} else { 
+				$env_score = $this->Cvss_model->roundup($this->Cvss_model->roundup(min(($modified_impact + $modifiedExploitability), 10)) * $exploit_code_maturity * $remediation_level * $report_confidence);
+			}
+		}
+
+		//Overall Score
+
+		if ($env_score > 0) {
+			$overall_score = $env_score;
+		} elseif ($temporal_score > 0) {
+			$overall_score = $temporal_score;
+		} else {
+			$overall_score = $base_score;
+		}
+		
+		echo "Base Score is : ", $base_score, " Temporal Score is : ", $temporal_score, ", Environmental Score is : ", $env_score, ", Overall Score is : ", $overall_score;		
+	}
+
+}
